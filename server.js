@@ -5,59 +5,62 @@ const port = process.env.PORT || 3000;
 
 app.use(express.json());
 
-const GEMINI_API_KEY = "AIzaSyCaDVztYdLKIsUH-_8LMxbCfVKk0k49b-Q";
+// Use DeepSeek API key (replace with your actual key or set it in env variables)
+const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || 'YOUR_DEEPSEEK_API_KEY_HERE';
 
-// Gemini endpoint URL
-const GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta:chatCompletions";
+// DeepSeek API Endpoint
+const DEEPSEEK_ENDPOINT = 'https://api.deepseek.com/v1/chat/completions';
 
-// Function to generate merged element using Gemini API
+// Function to generate merged element using DeepSeek API
 async function generateMergedElement(element1, element2) {
-  const model = "models/gemini-1.5-flash"; // Define the Gemini model
-  const prompt = `Merge the elements [${element1} + ${element2}] to create a logical result for it.
+  const prompt = `Merge the elements [${element1} + ${element2}] to create a logical result.
 
 1 - Capitalize the first letters of the result.
 2 - Add spaces between words if needed.
 3 - Return only the result with a maximum of 2 words.
 4 - Optionally include an emoji that represents the result.
 5 - Do not include any extra text beyond the result and emoji.
-Examples:
 
+Examples:
 [Fire + Water] → Steam 🌫️
 [Stone + Wood] → Axe 🪓
 [Metal + Heat] → Molten Metal 🔥
 [Plant + Water] → Growth 🌱
-Now, merge: [${element1} + ${element2}]."`;
 
-
+Now, merge: [${element1} + ${element2}].`;
 
   try {
     console.log('Sending API request with prompt:', prompt);
 
-    // Make a POST request to the Gemini API
+    // Make a POST request to DeepSeek's API
     const response = await axios.post(
-      GEMINI_ENDPOINT,
+      DEEPSEEK_ENDPOINT,
       {
-        model,
-        messages: [{ role: 'user', content: prompt }],
-        maxTokens: 10,
+        model: 'deepseek-chat', // You can change this to 'deepseek-coder' if needed
+        messages: [
+          {
+            role: 'system',
+            content: 'You are DeepSeek, an AI that logically merges elements.',
+          },
+          { role: 'user', content: prompt },
+        ],
+        max_tokens: 10,
         temperature: 1,
       },
       {
         headers: {
-          Authorization: `Bearer ${GEMINI_API_KEY}`,
+          Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
           'Content-Type': 'application/json',
         },
       }
     );
 
-    console.log('API Response:', response.data); // Log the full response for debugging
+    console.log('API Response:', response.data);
 
-    // Check if the response contains choices
     if (!response.data.choices || response.data.choices.length === 0) {
       throw new Error('No choices found in the API response');
     }
 
-    // Access the first choice's content
     const mergedElement = response.data.choices[0].message.content.trim();
     return mergedElement;
   } catch (error) {
@@ -88,3 +91,4 @@ app.post('/merge', async (req, res) => {
 app.listen(port, () => {
   console.log(`Server listening at http://localhost:${port}`);
 });
+
