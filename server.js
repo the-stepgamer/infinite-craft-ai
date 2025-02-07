@@ -6,7 +6,7 @@ const port = process.env.PORT || 3000;
 app.use(express.json());
 
 // Use DeepSeek API key (replace with your actual key or set it in env variables)
-const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || 'YOUR_DEEPSEEK_API_KEY_HERE';
+const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || 'sk-39447ec04cfe43b6ab909268d3d8490e';
 
 // DeepSeek API Endpoint
 const DEEPSEEK_ENDPOINT = 'https://api.deepseek.com/v1/chat/completions';
