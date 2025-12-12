@@ -9,7 +9,7 @@ app.use(express.json());
 
 // API key from .env (add this file to your repo, but .gitignore it if key is sensitive)
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
 
 app.post('/merge', async (req, res) => {
   const { element1, element2 } = req.body;
