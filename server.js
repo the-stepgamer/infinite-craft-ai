@@ -1,13 +1,13 @@
-// server.js - Using require() (CommonJS) - Works immediately
+// server.js - CommonJS version (works perfectly on Render.com)
 
 const express = require('express');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-require('dotenv').config();
+require('dotenv').config(); // Loads .env file
 
 const app = express();
 app.use(express.json());
 
-// Get API key from .env
+// API key from .env (add this file to your repo, but .gitignore it if key is sensitive)
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
