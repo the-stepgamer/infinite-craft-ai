@@ -79,8 +79,8 @@ Merge the elements [${element1} + ${element2}] to create a logical result.
 Rules:
 1. Capitalize the first letters of the result.
 2. Add spaces between words if needed.
-3. Maximum of 2 words.
-4. Optionally include one emoji that represents the result.
+3. ALWAYS include exactly ONE emoji that represents the result.
+4. The final output MUST end with the emoji.
 5. Return ONLY the result and emoji.
 
 Examples:
@@ -92,6 +92,7 @@ Examples:
 Now merge:
 [${element1} + ${element2}]
 `;
+
 
   try {
     const text = await tryGenerate(prompt);
