@@ -1,21 +1,20 @@
-// server.js - Fastify + OpenAI with fallback models
+// server.js - Fastify + Gemini (official contents format)
 
 const Fastify = require('fastify');
-const OpenAI = require('openai').default;
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 require('dotenv').config();
 
 const fastify = Fastify({
   logger: true
 });
 
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
+// Gemini client
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // Models in fallback order
 const models = [
-  "gpt-4o-mini",
-  "gpt-4.1-mini"
+  "gemini-2.5-flash",
+  "gemini-2.5-flash-lite"
 ];
 
 // Simple in-memory cache
@@ -23,26 +22,33 @@ const mergeCache = {};
 const temp = 0.5;
 
 async function tryGenerate(prompt, retries = 3) {
-  for (const model of models) {
+  for (const modelName of models) {
+    const model = genAI.getGenerativeModel({
+      model: modelName,
+      generationConfig: {
+        temperature: temp,
+        maxOutputTokens: 50
+      }
+      // safetySettings can be added here if needed
+    });
+
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        const completion = await client.chat.completions.create({
-          model,
-          messages: [
+        const result = await model.generateContent({
+          contents: [
             {
               role: "user",
-              content: prompt
+              parts: [{ text: prompt }]
             }
-          ],
-          temperature: temp
+          ]
         });
 
-        const text = completion.choices?.[0]?.message?.content?.trim();
+        const text = result.response.text()?.trim();
         if (!text) throw new Error("Empty response");
 
         return text;
       } catch (err) {
-        if ((err.status === 429 || err.status === 503) && attempt < retries) {
+        if (attempt < retries) {
           await new Promise(r => setTimeout(r, 500 * attempt));
           continue;
         }
@@ -50,9 +56,9 @@ async function tryGenerate(prompt, retries = 3) {
       }
     }
   }
-  throw new Error("All models failed after retries");
-}
 
+  throw new Error("All Gemini models failed after retries");
+}
 
 fastify.post('/merge', async (request, reply) => {
   const { element1, element2 } = request.body || {};
@@ -97,7 +103,7 @@ Now merge:
     request.log.error(error);
     reply.code(500);
     return {
-      error: "OpenAI API error",
+      error: "Gemini API error",
       details: error.message
     };
   }
