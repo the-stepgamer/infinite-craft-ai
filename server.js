@@ -1,7 +1,7 @@
 // server.js - Fastify + OpenAI with fallback models
 
 const Fastify = require('fastify');
-const OpenAI = require('openai');
+const OpenAI = require('openai').default;
 require('dotenv').config();
 
 const fastify = Fastify({
