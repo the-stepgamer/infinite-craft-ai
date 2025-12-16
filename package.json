@@ -1,17 +1,16 @@
 {
   "name": "ai-merge-api",
   "version": "1.0.0",
-  "description": "AI element merge API (Infinite Craft / Little Alchemy style) using OpenAI",
+  "description": "AI element merge API (Infinite Craft / Little Alchemy style) using Fastify and OpenAI",
   "main": "server.js",
   "type": "commonjs",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "express": "^4.21.2",
+    "fastify": "^4.29.0",
     "openai": "^4.78.1",
-    "dotenv": "^16.4.7",
-    "axios": "^1.7.9"
+    "dotenv": "^16.4.7"
   },
   "engines": {
     "node": ">=18"
@@ -19,11 +18,10 @@
   "license": "MIT",
   "keywords": [
     "node",
-    "express",
+    "fastify",
     "openai",
     "ai",
     "game",
     "infinite-craft"
   ]
 }
-
