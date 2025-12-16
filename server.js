@@ -20,23 +20,29 @@ const models = [
 
 // Simple in-memory cache
 const mergeCache = {};
+const temp = 0.5;
 
 async function tryGenerate(prompt, retries = 3) {
   for (const model of models) {
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        const response = await client.responses.create({
+        const completion = await client.chat.completions.create({
           model,
-          input: prompt
+          messages: [
+            {
+              role: "user",
+              content: prompt
+            }
+          ],
+          temperature: temp
         });
 
-        const text = response.output_text?.trim();
+        const text = completion.choices?.[0]?.message?.content?.trim();
         if (!text) throw new Error("Empty response");
 
         return text;
       } catch (err) {
         if ((err.status === 429 || err.status === 503) && attempt < retries) {
-          // exponential backoff
           await new Promise(r => setTimeout(r, 500 * attempt));
           continue;
         }
@@ -46,6 +52,7 @@ async function tryGenerate(prompt, retries = 3) {
   }
   throw new Error("All models failed after retries");
 }
+
 
 fastify.post('/merge', async (request, reply) => {
   const { element1, element2 } = request.body || {};
