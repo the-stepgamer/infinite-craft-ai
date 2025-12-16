@@ -1,7 +1,7 @@
 {
   "name": "ai-merge-api",
   "version": "1.0.0",
-  "description": "AI element merge API (Infinite Craft / Little Alchemy style) using Fastify and OpenAI",
+  "description": "AI element merge API (Infinite Craft / Little Alchemy style) using Fastify and Google Gemini",
   "main": "server.js",
   "type": "commonjs",
   "scripts": {
@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "fastify": "^4.29.0",
-    "openai": "^4.78.1",
+    "@google/generative-ai": "^0.21.0",
     "dotenv": "^16.4.7"
   },
   "engines": {
@@ -19,9 +19,11 @@
   "keywords": [
     "node",
     "fastify",
-    "openai",
+    "gemini",
+    "google-ai",
     "ai",
     "game",
-    "infinite-craft"
+    "infinite-craft",
+    "little-alchemy"
   ]
 }
