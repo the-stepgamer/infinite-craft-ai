@@ -1,11 +1,12 @@
-// server.js - OpenAI with fallback models
+// server.js - Fastify + OpenAI with fallback models
 
-const express = require('express');
+const Fastify = require('fastify');
 const OpenAI = require('openai');
 require('dotenv').config();
 
-const app = express();
-app.use(express.json());
+const fastify = Fastify({
+  logger: true
+});
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -13,7 +14,7 @@ const client = new OpenAI({
 
 // Models in fallback order
 const models = [
-  "gpt-4o-mini", // fast + cheap
+  "gpt-4o-mini",
   "gpt-4.1-mini"
 ];
 
@@ -46,16 +47,17 @@ async function tryGenerate(prompt, retries = 3) {
   throw new Error("All models failed after retries");
 }
 
-app.post('/merge', async (req, res) => {
-  const { element1, element2 } = req.body;
+fastify.post('/merge', async (request, reply) => {
+  const { element1, element2 } = request.body || {};
 
   if (!element1 || !element2) {
-    return res.status(400).json({ error: "element1 and element2 are required" });
+    reply.code(400);
+    return { error: "element1 and element2 are required" };
   }
 
   const key = [element1, element2].sort().join("+").toLowerCase();
   if (mergeCache[key]) {
-    return res.json({ result: mergeCache[key] });
+    return { result: mergeCache[key] };
   }
 
   const prompt = `
@@ -81,19 +83,25 @@ Now merge:
   try {
     const text = await tryGenerate(prompt);
     const result = text.toLowerCase() === "none" ? null : text;
+
     mergeCache[key] = result;
-    res.json({ result });
+    return { result };
   } catch (error) {
-    console.error(error);
-    res.status(500).json({
+    request.log.error(error);
+    reply.code(500);
+    return {
       error: "OpenAI API error",
       details: error.message
-    });
+    };
   }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`AI Merge API running on http://localhost:${PORT}/merge`);
-});
 
+fastify.listen({ port: PORT, host: '0.0.0.0' }, (err, address) => {
+  if (err) {
+    fastify.log.error(err);
+    process.exit(1);
+  }
+  fastify.log.info(`AI Merge API running on ${address}/merge`);
+});
