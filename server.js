@@ -1,32 +1,40 @@
-// server.js - flash + flash-lite fallback
+// server.js - OpenAI with fallback models
 
 const express = require('express');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const OpenAI = require('openai');
 require('dotenv').config();
 
 const app = express();
 app.use(express.json());
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
 
 // Models in fallback order
 const models = [
-  "gemini-2.5-flash",
-  "gemini-2.5-flash-lite"
+  "gpt-4o-mini", // fast + cheap
+  "gpt-4.1-mini"
 ];
 
 // Simple in-memory cache
 const mergeCache = {};
 
 async function tryGenerate(prompt, retries = 3) {
-  for (const modelName of models) {
-    const model = genAI.getGenerativeModel({ model: modelName });
+  for (const model of models) {
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        const result = await model.generateContent(prompt);
-        return result.response.text().trim();
+        const response = await client.responses.create({
+          model,
+          input: prompt
+        });
+
+        const text = response.output_text?.trim();
+        if (!text) throw new Error("Empty response");
+
+        return text;
       } catch (err) {
-        if (err.status === 503 && attempt < retries) {
+        if ((err.status === 429 || err.status === 503) && attempt < retries) {
           // exponential backoff
           await new Promise(r => setTimeout(r, 500 * attempt));
           continue;
@@ -50,7 +58,25 @@ app.post('/merge', async (req, res) => {
     return res.json({ result: mergeCache[key] });
   }
 
-  const prompt = `Merge the elements [${element1} + ${element2}] to create a logical result.1 - Capitalize the first letters of the result.2 - Add spaces between words if needed.3 - Return only the result with a maximum of 2 words.4 - Optionally include an emoji that represents the result.5 - Do not include any extra text beyond the result and emoji.Examples:[Fire + Water] → Steam 🌫️[Stone + Wood] → Axe 🪓[Metal + Heat] → Molten Metal 🔥[Plant + Water] → Growth 🌱Now, merge: [${element1} + ${element2}].`;
+  const prompt = `
+Merge the elements [${element1} + ${element2}] to create a logical result.
+
+Rules:
+1. Capitalize the first letters of the result.
+2. Add spaces between words if needed.
+3. Maximum of 2 words.
+4. Optionally include one emoji that represents the result.
+5. Return ONLY the result and emoji.
+
+Examples:
+[Fire + Water] → Steam 🌫️
+[Stone + Wood] → Axe 🪓
+[Metal + Heat] → Molten Metal 🔥
+[Plant + Water] → Growth 🌱
+
+Now merge:
+[${element1} + ${element2}]
+`;
 
   try {
     const text = await tryGenerate(prompt);
@@ -59,11 +85,15 @@ app.post('/merge', async (req, res) => {
     res.json({ result });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: "Gemini API error", details: error.message });
+    res.status(500).json({
+      error: "OpenAI API error",
+      details: error.message
+    });
   }
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`AI Merge API running on http://${PORT}/merge`);
+  console.log(`AI Merge API running on http://localhost:${PORT}/merge`);
 });
+
