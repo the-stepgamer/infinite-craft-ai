@@ -1,32 +1,32 @@
-// server.js - Fastify + Gemini (API key failover)
+// server.js - Fastify + OpenAI (API key failover)
 
 const Fastify = require('fastify');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const OpenAI = require('openai');
 require('dotenv').config();
 
-const fastify = Fastify({
-  logger: true
-});
+const fastify = Fastify({ logger: true });
 
-/* ------------------ Gemini API Keys ------------------ */
+/* ------------------ OpenAI API Keys ------------------ */
 
-const apiKeys = process.env.GEMINI_API_KEYS
+const apiKeys = process.env.OPENAI_API_KEYS
   ?.split(',')
   .map(k => k.trim())
   .filter(Boolean);
 
 if (!apiKeys || apiKeys.length === 0) {
-  throw new Error("GEMINI_API_KEYS is missing or empty");
+  throw new Error("OPENAI_API_KEYS is missing or empty");
 }
 
-// One client per key (ordered)
-const clients = apiKeys.map(key => new GoogleGenerativeAI(key));
+// One client per key
+const clients = apiKeys.map(
+  key => new OpenAI({ apiKey: key })
+);
 
 /* ------------------ Models & Config ------------------ */
 
 const models = [
-  "gemini-2.5-flash",
-  "gemini-2.5-flash-lite"
+  "gpt-4o-mini",
+  "gpt-4o"
 ];
 
 const temp = 0.5;
@@ -34,60 +34,48 @@ const temp = 0.5;
 // Simple in-memory cache
 const mergeCache = {};
 
-/* ------------------ Gemini Failover Logic ------------------ */
+/* ------------------ OpenAI Failover Logic ------------------ */
 
 async function tryGenerate(prompt) {
   let lastError;
 
   for (let keyIndex = 0; keyIndex < clients.length; keyIndex++) {
-    const genAI = clients[keyIndex];
+    const client = clients[keyIndex];
 
     for (const modelName of models) {
-      const model = genAI.getGenerativeModel({
-        model: modelName,
-        generationConfig: {
-          temperature: temp,
-          maxOutputTokens: 80 // ⬅️ important: slightly higher
-        }
-      });
-
       // Retry SAME key/model on empty output
       for (let attempt = 1; attempt <= 3; attempt++) {
         try {
-          const result = await model.generateContent({
-            contents: [
-              {
-                role: "user",
-                parts: [{ text: prompt }]
-              }
+          const completion = await client.chat.completions.create({
+            model: modelName,
+            temperature: temp,
+            max_tokens: 80,
+            messages: [
+              { role: "user", content: prompt }
             ]
           });
 
-          const raw = result.response.text();
-          const text = raw?.trim();
+          const text = completion.choices?.[0]?.message?.content?.trim();
 
           if (!text) {
             lastError = new Error("Empty response");
             await new Promise(r => setTimeout(r, 150 * attempt));
-            continue; // 🔁 retry same key/model
+            continue;
           }
 
           return text; // ✅ success
         } catch (err) {
           lastError = err;
-
-          // Real API error → rotate key
-          break;
+          break; // rotate key or model
         }
       }
     }
   }
 
   throw new Error(
-    `All Gemini API keys failed. Last error: ${lastError?.message}`
+    `All OpenAI API keys failed. Last error: ${lastError?.message}`
   );
 }
-
 
 /* ------------------ Routes ------------------ */
 
@@ -132,7 +120,6 @@ Now combine:
 [${element1} + ${element2}]
 `;
 
-
   try {
     const text = await tryGenerate(prompt);
     const result = text.toLowerCase() === "none" ? null : text;
@@ -143,7 +130,7 @@ Now combine:
     request.log.error(error);
     reply.code(500);
     return {
-      error: "Gemini API error",
+      error: "OpenAI API error",
       details: error.message
     };
   }
