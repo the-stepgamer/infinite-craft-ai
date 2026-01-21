@@ -112,9 +112,9 @@ Rules:
 1. Return ONE clear result name.
 2. Capitalize the first letter of each word.
 3. Add spaces between words if needed.
-4. Include EXACTLY ONE emoji that clearly represents the result.
-5. The emoji MUST be the final character.
-6. Return ONLY the result name and emoji. No explanations.
+4. Include an emoji that clearly represents the result (Maximum Of 5 Emojis).
+5. The emoji MUST be the starter character.
+6. Return ONLY the result name and emoji. No explanations or json formats. Just the result.
 
 Examples:
 [Fire + Water] → Steam 🌫️
