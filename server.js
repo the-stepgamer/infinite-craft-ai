@@ -47,33 +47,38 @@ async function tryGenerate(prompt) {
         model: modelName,
         generationConfig: {
           temperature: temp,
-          maxOutputTokens: 50
+          maxOutputTokens: 80 // ⬅️ important: slightly higher
         }
       });
 
-      try {
-        const result = await model.generateContent({
-          contents: [
-            {
-              role: "user",
-              parts: [{ text: prompt }]
-            }
-          ]
-        });
+      // Retry SAME key/model on empty output
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const result = await model.generateContent({
+            contents: [
+              {
+                role: "user",
+                parts: [{ text: prompt }]
+              }
+            ]
+          });
 
-        const text = result.response.text()?.trim();
-        if (!text) throw new Error("Empty response");
+          const raw = result.response.text();
+          const text = raw?.trim();
 
-        return text; // ✅ success, stop everything
-      } catch (err) {
-        lastError = err;
+          if (!text) {
+            lastError = new Error("Empty response");
+            await new Promise(r => setTimeout(r, 150 * attempt));
+            continue; // 🔁 retry same key/model
+          }
 
-        fastify.log.warn(
-          `[Gemini failover] Key ${keyIndex + 1}/${clients.length} failed (${modelName}): ${err.message}`
-        );
+          return text; // ✅ success
+        } catch (err) {
+          lastError = err;
 
-        // Immediately switch API key
-        break;
+          // Real API error → rotate key
+          break;
+        }
       }
     }
   }
@@ -82,6 +87,7 @@ async function tryGenerate(prompt) {
     `All Gemini API keys failed. Last error: ${lastError?.message}`
   );
 }
+
 
 /* ------------------ Routes ------------------ */
 
