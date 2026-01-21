@@ -39,35 +39,33 @@ const mergeCache = {};
 async function tryGenerate(prompt) {
   let lastError;
 
-  for (let keyIndex = 0; keyIndex < clients.length; keyIndex++) {
-    const client = clients[keyIndex];
-
+  for (const client of clients) {
     for (const modelName of models) {
-      // Retry SAME key/model on empty output
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        try {
-          const completion = await client.chat.completions.create({
-            model: modelName,
-            temperature: temp,
-            max_tokens: 80,
-            messages: [
-              { role: "user", content: prompt }
-            ]
-          });
+      try {
+        const completion = await client.chat.completions.create({
+          model: modelName,
+          temperature: 0.7,
+          max_tokens: 50,
+          messages: [{ role: "user", content: prompt }]
+        });
 
-          const text = completion.choices?.[0]?.message?.content?.trim();
+        const text = completion.choices?.[0]?.message?.content?.trim();
 
-          if (!text) {
-            lastError = new Error("Empty response");
-            await new Promise(r => setTimeout(r, 150 * attempt));
-            continue;
-          }
-
-          return text; // ✅ success
-        } catch (err) {
-          lastError = err;
-          break; // rotate key or model
+        if (!text) {
+          throw new Error("Model returned empty output");
         }
+
+        return text; // ✅ SUCCESS — STOP HERE
+      } catch (err) {
+        lastError = err;
+
+        // Only rotate on REAL errors
+        if (err.status === 401 || err.status === 429 || err.status >= 500) {
+          continue;
+        }
+
+        // Content / prompt issues → don't retry
+        break;
       }
     }
   }
