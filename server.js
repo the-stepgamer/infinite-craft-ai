@@ -1,4 +1,4 @@
-// server.js - Fastify + Gemini (official contents format)
+// server.js - Fastify + Gemini (API key failover)
 
 const Fastify = require('fastify');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
@@ -8,31 +8,49 @@ const fastify = Fastify({
   logger: true
 });
 
-// Gemini client
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+/* ------------------ Gemini API Keys ------------------ */
 
-// Models in fallback order
+const apiKeys = process.env.GEMINI_API_KEYS
+  ?.split(',')
+  .map(k => k.trim())
+  .filter(Boolean);
+
+if (!apiKeys || apiKeys.length === 0) {
+  throw new Error("GEMINI_API_KEYS is missing or empty");
+}
+
+// One client per key (ordered)
+const clients = apiKeys.map(key => new GoogleGenerativeAI(key));
+
+/* ------------------ Models & Config ------------------ */
+
 const models = [
   "gemini-2.5-flash",
   "gemini-2.5-flash-lite"
 ];
 
-// Simple in-memory cache
-const mergeCache = {};
 const temp = 0.5;
 
-async function tryGenerate(prompt, retries = 3) {
-  for (const modelName of models) {
-    const model = genAI.getGenerativeModel({
-      model: modelName,
-      generationConfig: {
-        temperature: temp,
-        maxOutputTokens: 50
-      }
-      // safetySettings can be added here if needed
-    });
+// Simple in-memory cache
+const mergeCache = {};
 
-    for (let attempt = 1; attempt <= retries; attempt++) {
+/* ------------------ Gemini Failover Logic ------------------ */
+
+async function tryGenerate(prompt) {
+  let lastError;
+
+  for (let keyIndex = 0; keyIndex < clients.length; keyIndex++) {
+    const genAI = clients[keyIndex];
+
+    for (const modelName of models) {
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        generationConfig: {
+          temperature: temp,
+          maxOutputTokens: 50
+        }
+      });
+
       try {
         const result = await model.generateContent({
           contents: [
@@ -46,19 +64,26 @@ async function tryGenerate(prompt, retries = 3) {
         const text = result.response.text()?.trim();
         if (!text) throw new Error("Empty response");
 
-        return text;
+        return text; // ✅ success, stop everything
       } catch (err) {
-        if (attempt < retries) {
-          await new Promise(r => setTimeout(r, 500 * attempt));
-          continue;
-        }
-        throw err;
+        lastError = err;
+
+        fastify.log.warn(
+          `[Gemini failover] Key ${keyIndex + 1}/${clients.length} failed (${modelName}): ${err.message}`
+        );
+
+        // Immediately switch API key
+        break;
       }
     }
   }
 
-  throw new Error("All Gemini models failed after retries");
+  throw new Error(
+    `All Gemini API keys failed. Last error: ${lastError?.message}`
+  );
 }
+
+/* ------------------ Routes ------------------ */
 
 fastify.post('/merge', async (request, reply) => {
   const { element1, element2 } = request.body || {};
@@ -68,20 +93,28 @@ fastify.post('/merge', async (request, reply) => {
     return { error: "element1 and element2 are required" };
   }
 
-  const key = [element1, element2].sort().join("+").toLowerCase();
+  const key = [element1, element2]
+    .sort()
+    .join("+")
+    .toLowerCase();
+
   if (mergeCache[key]) {
     return { result: mergeCache[key] };
   }
 
   const prompt = `
-Merge the elements [${element1} + ${element2}] to create a logical result.
+You are combining two elements into a single, logical result.
+
+The result should feel natural, intuitive, and commonly understandable.
+Interpret the elements conceptually if needed, but avoid random or abstract outcomes.
 
 Rules:
-1. Capitalize the first letters of the result.
-2. Add spaces between words if needed.
-3. ALWAYS include exactly ONE emoji that represents the result.
-4. The final output MUST end with the emoji.
-5. Return ONLY the result and emoji.
+1. Return ONE clear result name.
+2. Capitalize the first letter of each word.
+3. Add spaces between words if needed.
+4. Include EXACTLY ONE emoji that clearly represents the result.
+5. The emoji MUST be the final character.
+6. Return ONLY the result name and emoji. No explanations.
 
 Examples:
 [Fire + Water] → Steam 🌫️
@@ -89,7 +122,7 @@ Examples:
 [Metal + Heat] → Molten Metal 🔥
 [Plant + Water] → Growth 🌱
 
-Now merge:
+Now combine:
 [${element1} + ${element2}]
 `;
 
@@ -109,6 +142,8 @@ Now merge:
     };
   }
 });
+
+/* ------------------ Server ------------------ */
 
 const PORT = process.env.PORT || 3000;
 
