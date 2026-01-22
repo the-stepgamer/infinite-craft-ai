@@ -1,7 +1,6 @@
-// server.js - Fastify + OpenAI (3 keys, cooldown, gpt-4o-mini only)
+// server.js - Fastify + OpenAI (3 keys, cooldown) + Groq fallback
 
 const Fastify = require("fastify");
-const OpenAI = require("openai");
 require("dotenv").config();
 
 const fastify = Fastify({ logger: true });
@@ -17,48 +16,45 @@ if (!apiKeys || apiKeys.length === 0) {
   throw new Error("OPENAI_API_KEYS is missing or empty");
 }
 
-// Create one client per key
-const clients = apiKeys.map(key => new OpenAI({ apiKey: key }));
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+if (!GROQ_API_KEY) {
+  throw new Error("GROQ_API_KEY is required");
+}
+
+// Create one OpenAI client per key
+const OpenAI = require("openai");
+const openaiClients = apiKeys.map(key => new OpenAI({ apiKey: key }));
 
 /* ------------------ Key Cooldown System ------------------ */
 
-const KEY_COOLDOWN_MS = 30_000; // 30 seconds
-
-const keyPool = clients.map(client => ({
+const KEY_COOLDOWN_MS = 30_000;
+const keyPool = openaiClients.map(client => ({
   client,
   cooldownUntil: 0
 }));
-
 let keyIndex = 0;
 
 function getNextClient() {
   const now = Date.now();
-
   for (let i = 0; i < keyPool.length; i++) {
     keyIndex = (keyIndex + 1) % keyPool.length;
     const entry = keyPool[keyIndex];
-
     if (entry.cooldownUntil <= now) {
       return entry;
     }
   }
-
-  return null; // all keys cooling down
+  return null;
 }
 
 /* ------------------ Global Rate Limiting ------------------ */
 
-const REQUEST_COOLDOWN_MS = 800; // ~1 req/sec per IP
+const REQUEST_COOLDOWN_MS = 800;
 const requestCooldown = new Map();
 
 function rateLimited(ip) {
   const now = Date.now();
   const last = requestCooldown.get(ip) || 0;
-
-  if (now - last < REQUEST_COOLDOWN_MS) {
-    return true;
-  }
-
+  if (now - last < REQUEST_COOLDOWN_MS) return true;
   requestCooldown.set(ip, now);
   return false;
 }
@@ -73,43 +69,64 @@ const MAX_TOKENS = 32;
 
 const mergeCache = {};
 
-/* ------------------ Safe Generate Logic ------------------ */
+/* ------------------ Safe OpenAI Generate Logic ------------------ */
 
-async function tryGenerate(prompt) {
+async function tryOpenAI(prompt) {
   let lastError;
-
   for (let i = 0; i < keyPool.length; i++) {
     const entry = getNextClient();
     if (!entry) break;
 
     try {
-      const completion = await entry.client.chat.completions.create({
+      const response = await entry.client.chat.completions.create({
         model: MODEL,
         temperature: TEMPERATURE,
         max_tokens: MAX_TOKENS,
         messages: [{ role: "user", content: prompt }]
       });
 
-      const text = completion.choices?.[0]?.message?.content?.trim();
+      const text = response.choices?.[0]?.message?.content?.trim();
       if (!text) throw new Error("Empty model response");
 
-      return text; // ✅ SUCCESS
+      return text;
     } catch (err) {
       lastError = err;
-
-      // Cooldown key on rate limit or server error
       if (err.status === 429 || err.status >= 500) {
         entry.cooldownUntil = Date.now() + KEY_COOLDOWN_MS;
       }
     }
   }
-
-  throw new Error(
-    `All OpenAI keys unavailable. Last error: ${lastError?.message}`
-  );
+  throw new Error(`OpenAI unavailable. Last error: ${lastError?.message}`);
 }
 
-/* ------------------ Routes ------------------ */
+/* ------------------ Groq Fallback ------------------ */
+
+async function tryGroq(prompt) {
+  const url = "https://api.groq.com/openai/v1/chat.completions";
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${GROQ_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: "llama-3.1-8b-instant",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.4,
+      max_tokens: MAX_TOKENS
+    })
+  });
+
+  if (!res.ok) {
+    throw new Error(`Groq Error ${res.status}`);
+  }
+
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content?.trim();
+}
+
+/* ------------------ /merge Endpoint ------------------ */
 
 fastify.post("/merge", async (request, reply) => {
   const { element1, element2 } = request.body || {};
@@ -119,7 +136,6 @@ fastify.post("/merge", async (request, reply) => {
     return { error: "element1 and element2 are required" };
   }
 
-  // Global traffic smoothing
   if (rateLimited(request.ip)) {
     reply.code(429);
     return { error: "Too many requests" };
@@ -130,7 +146,6 @@ fastify.post("/merge", async (request, reply) => {
     .join("+")
     .toLowerCase();
 
-  // Cache hit
   if (mergeCache[key]) {
     return { result: mergeCache[key] };
   }
@@ -155,25 +170,30 @@ ${element1} + ${element2}
 `;
 
   try {
-    const text = await tryGenerate(prompt);
+    const text = await tryOpenAI(prompt);
     const result = text.toLowerCase() === "none" ? null : text;
-
     mergeCache[key] = result;
     return { result };
-  } catch (error) {
-    request.log.error(error);
-    reply.code(500);
-    return {
-      error: "OpenAI API error",
-      details: error.message
-    };
+  } catch {
+    try {
+      const groqText = await tryGroq(prompt);
+      const result = groqText.toLowerCase() === "none" ? null : groqText;
+      mergeCache[key] = result;
+      return { result };
+    } catch (fallbackError) {
+      request.log.error(fallbackError);
+      reply.code(500);
+      return {
+        error: "AI backend error",
+        details: fallbackError.message
+      };
+    }
   }
 });
 
 /* ------------------ Server ------------------ */
 
 const PORT = process.env.PORT || 3000;
-
 fastify.listen({ port: PORT, host: "0.0.0.0" }, (err, address) => {
   if (err) {
     fastify.log.error(err);
@@ -181,4 +201,3 @@ fastify.listen({ port: PORT, host: "0.0.0.0" }, (err, address) => {
   }
   fastify.log.info(`AI Merge API running on ${address}/merge`);
 });
-
