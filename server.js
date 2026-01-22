@@ -156,7 +156,7 @@ Interpret the elements conceptually if needed.
 
 Rules:
 - Return ONE result only
-- Capitalize words
+- Capitalize first letter of words
 - Start with an emoji
 - Result Must Be A Dictionary Word
 - No explanations
