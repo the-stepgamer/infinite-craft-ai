@@ -150,23 +150,30 @@ fastify.post("/merge", async (request, reply) => {
     return { result: mergeCache[key] };
   }
 
-  const prompt = `
-Combine two elements into ONE clear, logical result.
-Interpret the elements conceptually if needed.
+ const prompt = `You are combining two elements into ONE final result.
 
-Rules:
-- Return ONE result only
-- Capitalize first letter of words
-- Start with an emoji (Don't End With One)
-- Do not add random Unicode Characters (Such as arrows)
-- Result Must Be A Dictionary Word
-- No explanations
+OUTPUT RULES (STRICT):
+- Output MUST be ONLY the final result name.
+- ONE short noun or noun phrase only.
+- NO equations, arrows, or operators (+, →, =).
+- NO explanations, descriptions, or extra text.
+- Start with an emoji (max 3).
+- Capitalize Each Word.
 
-Examples:
-Fire + Water → Steam 🌫️
-Stone + Wood → Axe 🪓
+These are INVALID outputs:
+Water + Turbulence → Eddies
+Earth + Fire = Mud
+Result: Mud
+🔥 Mud (from Earth and Fire)
 
-Combine:
+These are VALID outputs:
+🌪️ Eddies
+🪨 Mud
+🔤 Letters
+🌫️ Steam
+🌗 Twilight
+
+Now combine:
 ${element1} + ${element2}
 `;
 
