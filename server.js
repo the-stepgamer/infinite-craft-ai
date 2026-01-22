@@ -102,7 +102,7 @@ async function tryOpenAI(prompt) {
 /* ------------------ Groq Fallback ------------------ */
 
 async function tryGroq(prompt) {
-  const url = "https://api.groq.com/openai/v1/chat.completions";
+  const url = "https://api.groq.com/openai/v1/chat/completions";
 
   const res = await fetch(url, {
     method: "POST",
