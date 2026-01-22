@@ -62,7 +62,7 @@ function rateLimited(ip) {
 /* ------------------ Model Config ------------------ */
 
 const MODEL = "gpt-4o-mini";
-const GROQ_MODEL: "llama-3.1-8b-instant";
+const GROQ_MODEL = "llama-3.1-8b-instant";
 const TEMPERATURE = 0.6;
 const MAX_TOKENS = 50;
 
