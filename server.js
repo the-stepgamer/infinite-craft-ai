@@ -150,7 +150,25 @@ fastify.post("/merge", async (request, reply) => {
     return { result: mergeCache[key] };
   }
 
-  const prompt = process.env.API_PROMPT;
+  const prompt = `
+Combine two elements into ONE clear, logical result.
+Interpret the elements conceptually if needed.
+
+Rules:
+- Return ONE result only
+- Capitalize first letter of words
+- Start with an emoji (Don't End With One)
+- Do not add random Unicode Characters (Such as arrows)
+- Result Must Be A Dictionary Word
+- No explanations
+
+Examples:
+Fire + Water → Steam 🌫️
+Stone + Wood → Axe 🪓
+
+Combine:
+${element1} + ${element2}
+`;
 
   try {
     const text = await tryOpenAI(prompt);
