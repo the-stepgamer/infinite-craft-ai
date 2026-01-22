@@ -62,8 +62,9 @@ function rateLimited(ip) {
 /* ------------------ Model Config ------------------ */
 
 const MODEL = "gpt-4o-mini";
-const TEMPERATURE = 0.45;
-const MAX_TOKENS = 32;
+const GROQ_MODEL: "llama-3.1-8b-instant";
+const TEMPERATURE = 0.6;
+const MAX_TOKENS = 50;
 
 /* ------------------ Cache ------------------ */
 
@@ -111,9 +112,9 @@ async function tryGroq(prompt) {
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: "llama-3.1-8b-instant",
+      model: GROQ_MODEL,
       messages: [{ role: "user", content: prompt }],
-      temperature: 0.4,
+      temperature: TEMPERATURE,
       max_tokens: MAX_TOKENS
     })
   });
@@ -158,18 +159,18 @@ OUTPUT RULES (STRICT):
 - NO equations, arrows, or operators (+, →, =).
 - NO explanations, descriptions, or extra text.
 - Start with an emoji (max 3).
-- Capitalize Each Word.
+- Capitalize First Letter of Each Word.
 
 These are INVALID outputs:
-Water + Turbulence → Eddies
+Water + Turbulence → Wave
 Earth + Fire = Mud
 Result: Mud
 🔥 Mud (from Earth and Fire)
 
 These are VALID outputs:
-🌪️ Eddies
+🌊 Wave
 🪨 Mud
-🔤 Letters
+🔤 Letter
 🌫️ Steam
 🌗 Twilight
 
