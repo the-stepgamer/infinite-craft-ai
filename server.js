@@ -99,14 +99,25 @@ fastify.post("/merge", async (request, reply) => {
   }
 
   // 🔥 Small, strong prompt
-const prompt = `Combine "${element1}" and "${element2}" into ONE result.  
-Output format: 🧠 ResultName  
-Rules: 
-one emoji at the start, 
-capitalized first letter, 
-NO explanations,
-Spaces Between The Words,
-Result Must Make Sense.`;
+const prompt = `You are an element-creation AI for Infinite Craft / Little Alchemy style merges.
+Combine "${element1}" + "${element2}" into ONE logical element.
+
+Output EXACTLY one line in this format:
+<emoji><space><Result Name>
+
+Rules:
+- One emoji at the start.
+- Then one space, then the name.
+- Words separated by spaces (e.g. "Molten Metal").
+- Capitalize words.
+- No explanations, no equations, no extra text.
+- Do NOT repeat the same word twice.
+
+Example:
+🔥 Molten Metal
+`;
+
+
 
   try {
     const text = await callGroq(prompt);
