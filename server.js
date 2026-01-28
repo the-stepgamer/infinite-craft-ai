@@ -170,7 +170,7 @@ fastify.post("/merge", async (request, reply) => {
 
  const prompt = `Combine "${element1}" and "${element2}" into ONE result.
 Output format: 🧠 ResultName
-Rules: one emoji, capitalized words, no explanations.`;
+Rules: one emoji, capitalized first letter, no explanations.`;
 
 
 
