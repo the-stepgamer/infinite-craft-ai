@@ -99,23 +99,34 @@ fastify.post("/merge", async (request, reply) => {
   }
 
   // 🔥 Small, strong prompt
-const prompt = `You are an element-creation AI for Infinite Craft / Little Alchemy style merges.
-Combine "${element1}" + "${element2}" into ONE logical element.
+const prompt = `You are an AI inspired by Little Alchemy 2.
 
-Output EXACTLY one line in this format:
-<emoji><space><Result Name>
+When given two nouns in the format:
+"Element1/Element2"
+
+Reply with ONE realistic noun created by mixing them.
+
+Output format:
+[ONE emoji] [Result Name]
 
 Rules:
-- One emoji at the start.
-- Then one space, then the name.
-- Words separated by spaces (e.g. "Molten Metal").
-- Capitalize words.
-- No explanations, no equations, no extra text.
-- Do NOT repeat the same word twice.
+- Output ONLY the result.
+- Exactly ONE emoji related to the result.
+- Result must be a real dictionary noun.
+- Capitalize the first letter of each word.
+- Use spaces between words (no CamelCase).
+- Multiple words are allowed.
+- No explanations, symbols, arrows, or equations.
+- If the result could be sexual, explicit, or inappropriate, reply exactly: #1
 
-Example:
-🔥 Molten Metal
-`;
+Examples:
+Water/Fire → 💨 Steam  
+Earth/Water → 🧱 Mud  
+Letter/Alphabet → 🔤 Letters  
+
+Now combine:
+"${element1}/${element2}"`;
+
 
 
 
