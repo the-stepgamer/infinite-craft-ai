@@ -1,4 +1,4 @@
-// server.js - Fastify + OpenAI (3 keys, cooldown) + Groq fallback
+// server.js — Fastify + OpenRouter free model
 
 const Fastify = require("fastify");
 require("dotenv").config();
@@ -8,59 +8,28 @@ const fastify = Fastify({ logger: true });
 function extractResult(text) {
   if (!text) return null;
 
+  // take only the first line
   let line = text.split("\n")[0].trim();
 
-  // Equation-style cleanup
+  // try parse equation-style
   line = line.split(/=|→|:/).pop().trim();
 
-  // Remove leading junk but keep emoji + text
-  line = line.replace(/^[^A-Za-z\u{1F300}-\u{1FAFF}]+/gu, "");
+  // remove leading non-emoji/text
+  line = line.replace(/^[^A-Za-z\u{1F300}-\u{1FAFF}]+/gu, "").trim();
 
   return line || null;
 }
 
+/* ------------------ OpenRouter ------------------ */
 
-
-/* ------------------ OpenAI API Keys ------------------ */
-
-const apiKeys = process.env.OPENAI_API_KEYS
-  ?.split(",")
-  .map(k => k.trim())
-  .filter(Boolean);
-
-if (!apiKeys || apiKeys.length === 0) {
-  throw new Error("OPENAI_API_KEYS is missing or empty");
+const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY;
+if (!OPENROUTER_KEY) {
+  throw new Error("OPENROUTER_API_KEY is required");
 }
 
-const GROQ_API_KEY = process.env.GROQ_API_KEY;
-if (!GROQ_API_KEY) {
-  throw new Error("GROQ_API_KEY is required");
-}
-
-// Create one OpenAI client per key
-const OpenAI = require("openai");
-const openaiClients = apiKeys.map(key => new OpenAI({ apiKey: key }));
-
-/* ------------------ Key Cooldown System ------------------ */
-
-const KEY_COOLDOWN_MS = 30_000;
-const keyPool = openaiClients.map(client => ({
-  client,
-  cooldownUntil: 0
-}));
-let keyIndex = 0;
-
-function getNextClient() {
-  const now = Date.now();
-  for (let i = 0; i < keyPool.length; i++) {
-    keyIndex = (keyIndex + 1) % keyPool.length;
-    const entry = keyPool[keyIndex];
-    if (entry.cooldownUntil <= now) {
-      return entry;
-    }
-  }
-  return null;
-}
+// Free model you want to use
+// Options can include models with suffix :free, e.g. "meta-llama/llama-3.3-70b-instruct:free"
+const OPENROUTER_MODEL = "meta-llama/llama-3.3-70b-instruct:free"; 
 
 /* ------------------ Global Rate Limiting ------------------ */
 
@@ -75,73 +44,35 @@ function rateLimited(ip) {
   return false;
 }
 
-/* ------------------ Model Config ------------------ */
-
-const MODEL = "gpt-4o-mini";
-const GROQ_MODEL = "llama-3.1-8b-instant";
-const TEMPERATURE = 0.6;
-const MAX_TOKENS = 50;
-
 /* ------------------ Cache ------------------ */
 
 const mergeCache = {};
 
-/* ------------------ Safe OpenAI Generate Logic ------------------ */
+/* ------------------ OpenRouter Call ------------------ */
 
-async function tryOpenAI(prompt) {
-  let lastError;
-  for (let i = 0; i < keyPool.length; i++) {
-    const entry = getNextClient();
-    if (!entry) break;
-
-    try {
-      const response = await entry.client.chat.completions.create({
-        model: MODEL,
-        temperature: TEMPERATURE,
-        max_tokens: MAX_TOKENS,
-        messages: [{ role: "user", content: prompt }]
-      });
-
-      const text = response.choices?.[0]?.message?.content?.trim();
-      if (!text) throw new Error("Empty model response");
-
-      return extractResult(text);
-    } catch (err) {
-      lastError = err;
-      if (err.status === 429 || err.status >= 500) {
-        entry.cooldownUntil = Date.now() + KEY_COOLDOWN_MS;
-      }
-    }
-  }
-  throw new Error(`OpenAI unavailable. Last error: ${lastError?.message}`);
-}
-
-/* ------------------ Groq Fallback ------------------ */
-
-async function tryGroq(prompt) {
-  const url = "https://api.groq.com/openai/v1/chat/completions";
+async function callOpenRouter(prompt) {
+  const url = "https://openrouter.ai/api/v1/chat/completions";
 
   const res = await fetch(url, {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${GROQ_API_KEY}`,
+      "Authorization": `Bearer ${OPENROUTER_KEY}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: GROQ_MODEL,
+      model: OPENROUTER_MODEL,
       messages: [{ role: "user", content: prompt }],
-      temperature: TEMPERATURE,
-      max_tokens: MAX_TOKENS
+      temperature: 0.6,
+      max_tokens: 50
     })
   });
 
   if (!res.ok) {
-    throw new Error(`Groq Error ${res.status}`);
+    throw new Error(`OpenRouter Error ${res.status}`);
   }
 
   const data = await res.json();
-  const result = data.choices?.[0]?.message?.content?.trim()
-  return extractResult(result);
+  return extractResult(data.choices?.[0]?.message?.content?.trim());
 }
 
 /* ------------------ /merge Endpoint ------------------ */
@@ -159,44 +90,31 @@ fastify.post("/merge", async (request, reply) => {
     return { error: "Too many requests" };
   }
 
-  const key = [element1, element2]
-    .sort()
-    .join("+")
-    .toLowerCase();
-
+  const key = [element1, element2].sort().join("+").toLowerCase();
   if (mergeCache[key]) {
     return { result: mergeCache[key] };
   }
 
- const prompt = `Combine "${element1}" and "${element2}" into ONE result.
-Output format: 🧠 ResultName
+const prompt = `Combine "${element1}" and "${element2}" into ONE result. 
+Output format: 🧠 ResultName 
 Rules: one emoji, capitalized first letter, no explanations.`;
 
-
-
   try {
-    const text = await tryOpenAI(prompt);
-    const result = text.toLowerCase() === "none" ? null : text;
+    const text = await callOpenRouter(prompt);
+    const result = text?.toLowerCase() === "none" ? null : text;
     mergeCache[key] = result;
     return { result };
-  } catch {
-    try {
-      const groqText = await tryGroq(prompt);
-      const result = groqText.toLowerCase() === "none" ? null : groqText;
-      mergeCache[key] = result;
-      return { result };
-    } catch (fallbackError) {
-      request.log.error(fallbackError);
-      reply.code(500);
-      return {
-        error: "AI backend error",
-        details: fallbackError.message
-      };
-    }
+  } catch (error) {
+    request.log.error(error);
+    reply.code(500);
+    return {
+      error: "AI backend error",
+      details: error.message
+    };
   }
 });
 
-/* ------------------ Server ------------------ */
+/* ------------------ Server Start ------------------ */
 
 const PORT = process.env.PORT || 3000;
 fastify.listen({ port: PORT, host: "0.0.0.0" }, (err, address) => {
