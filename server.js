@@ -101,7 +101,12 @@ fastify.post("/merge", async (request, reply) => {
   // 🔥 Small, strong prompt
 const prompt = `Combine "${element1}" and "${element2}" into ONE result.  
 Output format: 🧠 ResultName  
-Rules: one emoji, capitalized first letter, NO explanations.`;
+Rules: 
+one emoji at the start, 
+capitalized first letter, 
+NO explanations,
+Spaces Between The Words,
+Result Must Make Sense.`;
 
   try {
     const text = await callGroq(prompt);
