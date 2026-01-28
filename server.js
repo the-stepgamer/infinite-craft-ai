@@ -5,6 +5,22 @@ require("dotenv").config();
 
 const fastify = Fastify({ logger: true });
 
+function extractResult(text) {
+  if (!text) return null;
+
+  let line = text.split("\n")[0].trim();
+
+  // Equation-style cleanup
+  line = line.split(/=|→|:/).pop().trim();
+
+  // Remove leading junk but keep emoji + text
+  line = line.replace(/^[^A-Za-z\u{1F300}-\u{1FAFF}]+/gu, "");
+
+  return line || null;
+}
+
+
+
 /* ------------------ OpenAI API Keys ------------------ */
 
 const apiKeys = process.env.OPENAI_API_KEYS
@@ -89,7 +105,7 @@ async function tryOpenAI(prompt) {
       const text = response.choices?.[0]?.message?.content?.trim();
       if (!text) throw new Error("Empty model response");
 
-      return text;
+      return extractResult(text);
     } catch (err) {
       lastError = err;
       if (err.status === 429 || err.status >= 500) {
@@ -124,7 +140,8 @@ async function tryGroq(prompt) {
   }
 
   const data = await res.json();
-  return data.choices?.[0]?.message?.content?.trim();
+  const result = data.choices?.[0]?.message?.content?.trim()
+  return extractResult(result);
 }
 
 /* ------------------ /merge Endpoint ------------------ */
@@ -151,32 +168,11 @@ fastify.post("/merge", async (request, reply) => {
     return { result: mergeCache[key] };
   }
 
- const prompt = `You are combining two elements into ONE final result.
+ const prompt = `Combine "${element1}" and "${element2}" into ONE result.
+Output format: 🧠 ResultName
+Rules: one emoji, capitalized words, no explanations.`;
 
-OUTPUT RULES (STRICT):
-- Output MUST be ONLY the final result name.
-- ONE short noun or noun phrase only.
-- NO equations, arrows, or operators (+, →, =).
-- NO explanations, descriptions, or extra text.
-- Start with an emoji (max 3).
-- Capitalize First Letter of Each Word.
 
-These are INVALID outputs:
-Water + Turbulence → Wave
-Earth + Fire = Mud
-Result: Mud
-🔥 Mud (from Earth and Fire)
-
-These are VALID outputs:
-🌊 Wave
-🪨 Mud
-🔤 Letter
-🌫️ Steam
-🌗 Twilight
-
-Now combine:
-${element1} + ${element2}
-`;
 
   try {
     const text = await tryOpenAI(prompt);
