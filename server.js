@@ -47,7 +47,7 @@ const mergeCache = {};
 /* ------------------ Groq Call ------------------ */
 
 const GROQ_MODEL = "llama-3.1-8b-instant";
-const TEMPERATURE = 0.6;
+const TEMPERATURE = 0.35;
 const MAX_TOKENS = 50;
 
 async function callGroq(prompt) {
