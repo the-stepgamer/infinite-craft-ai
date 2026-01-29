@@ -111,13 +111,13 @@ Output format:
 
 Rules:
 - Output ONLY the result.
-- Exactly ONE emoji related to the result.
+- Exactly ONE emoji related to the result (required).
 - Result must be a real dictionary noun.
 - Capitalize the first letter of each word.
 - Use spaces between words (no CamelCase).
 - Multiple words are allowed.
 - No explanations, symbols, arrows, or equations.
-- If the result could be sexual, explicit, or inappropriate, reply exactly: #1
+- If the result could be sexual, explicit, or inappropriate, reply exactly: Unknown
 
 Examples:
 Water/Fire → 💨 Steam  
